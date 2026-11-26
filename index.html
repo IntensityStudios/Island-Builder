@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <!-- Mobile: fill the screen (incl. notch area), no pinch zoom, no page scroll -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#7ec8e3" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Island Builder</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏝️</text></svg>" />
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- three.js is loaded from a pinned CDN version; no build step required. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene"></canvas>
+
+    <!-- Top bar: title, mode switch, undo/redo, panel toggle -->
+    <header id="topbar" class="ui">
+      <div class="brand">🏝️ <span>Island Builder</span></div>
+      <div class="group">
+        <button id="btn-undo" class="icon" title="Undo (Ctrl+Z)">↶</button>
+        <button id="btn-redo" class="icon" title="Redo (Ctrl+Y)">↷</button>
+        <button id="btn-mode" class="pill" title="Toggle Walk mode (Tab)">🚶 Walk</button>
+        <button id="btn-mute" class="icon" title="Mute (M)">🔊</button>
+        <button id="btn-panel" class="icon" title="World settings">⚙️</button>
+      </div>
+    </header>
+
+    <!-- Tool palette (build mode) -->
+    <nav id="tools" class="ui build-only" aria-label="Tools">
+      <button data-tool="orbit" title="Look around (1)">🎥<small>View</small></button>
+      <button data-tool="place" title="Place props (2)">🌲<small>Place</small></button>
+      <button data-tool="select" title="Select / move (3)">👆<small>Select</small></button>
+      <button data-tool="raise" title="Raise terrain (4)">⛰️<small>Raise</small></button>
+      <button data-tool="lower" title="Lower terrain (5)">🕳️<small>Lower</small></button>
+      <button data-tool="smooth" title="Smooth terrain (6)">〰️<small>Smooth</small></button>
+      <button data-tool="flatten" title="Flatten terrain (7)">▭<small>Flatten</small></button>
+      <button data-tool="paint" title="Paint terrain (8)">🎨<small>Paint</small></button>
+    </nav>
+
+    <!-- Context panel for the active tool (filled by ui.js) -->
+    <section id="context" class="ui build-only panel"></section>
+
+    <!-- World settings panel -->
+    <aside id="world" class="ui panel hidden">
+      <div class="panel-head"><b>World</b><button class="icon small" id="btn-close-world">✕</button></div>
+      <label class="row">🕒 Time <span id="time-label">12:00</span></label>
+      <div class="row"><input type="range" id="time" min="0" max="24" step="0.05" value="12" /><button id="btn-autotime" class="pill small">Auto</button></div>
+      <label class="row">🌊 Water level <span id="water-label">0.0</span></label>
+      <input type="range" id="water" min="-4" max="6" step="0.1" value="0" />
+      <div class="row-label">🌦️ Weather</div>
+      <div class="seg" id="weather">
+        <button data-weather="clear">☀️</button><button data-weather="rain">🌧️</button><button data-weather="snow">❄️</button><button data-weather="fog">🌫️</button>
+      </div>
+      <div class="row-label">🐇 Life</div>
+      <div class="row stepper">Villagers <button data-npc="villager" data-d="-1">−</button><span id="npc-villager">4</span><button data-npc="villager" data-d="1">+</button></div>
+      <div class="row stepper">Critters <button data-npc="critter" data-d="-1">−</button><span id="npc-critter">6</span><button data-npc="critter" data-d="1">+</button></div>
+      <div class="row-label">💾 Island</div>
+      <div class="grid2">
+        <button id="btn-save">💾 Save</button><button id="btn-load">📂 Load</button>
+        <button id="btn-export">⬇️ Export</button><button id="btn-import">⬆️ Import</button>
+        <button id="btn-share" class="accent">🔗 Share link</button><button id="btn-random">🎲 Random</button>
+        <button id="btn-reset" class="danger">🧹 Reset</button><button id="btn-help">❓ Help</button>
+      </div>
+      <input type="file" id="file-import" accept="application/json,.json" hidden />
+    </aside>
+
+    <!-- Walk mode HUD -->
+    <div id="walk-hud" class="ui walk-only">
+      <div id="walk-tip">WASD move · Mouse look (click to lock) · Space jump · Shift run · V camera · Tab/Esc build</div>
+      <div id="joystick"><div id="joystick-knob"></div></div>
+      <div id="walk-buttons">
+        <button id="btn-jump" class="big">⤒</button>
+        <button id="btn-view" class="big">👁️</button>
+      </div>
+    </div>
+
+    <!-- Toast + modal -->
+    <div id="toast" class="ui"></div>
+    <div id="modal" class="hidden"><div class="modal-card ui"><div id="modal-body"></div><div class="modal-actions"><button id="modal-close">Close</button></div></div></div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
