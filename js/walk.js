@@ -21,6 +21,7 @@ export class WalkMode {
     this.keys = new Set();
     this.joy = { x: 0, y: 0 };
     this.jumpQueued = false;
+    this.tvSteer = false; // TV remote: left/right turn the camera instead of strafing
 
     this.avatar = makeVillager(Math.random, { shirt: '#ff7f50', skin: '#f1c7a3', hat: '#e9c46a' });
     this.avatar.visible = false;
@@ -119,7 +120,11 @@ export class WalkMode {
   update(dt) {
     if (!this.active) return;
     const k = this.keys;
-    let mx = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) + this.joy.x;
+    if (this.tvSteer) {
+      if (k.has('ArrowLeft')) this.yaw += dt * 1.8;
+      if (k.has('ArrowRight')) this.yaw -= dt * 1.8;
+    }
+    let mx = (k.has('KeyD') || (!this.tvSteer && k.has('ArrowRight')) ? 1 : 0) - (k.has('KeyA') || (!this.tvSteer && k.has('ArrowLeft')) ? 1 : 0) + this.joy.x;
     let mz = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0) - this.joy.y;
     const len = Math.hypot(mx, mz);
     if (len > 1) { mx /= len; mz /= len; }

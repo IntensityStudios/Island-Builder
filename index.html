@@ -22,7 +22,7 @@
 </head>
 <body>
   <div id="app">
-    <canvas id="scene"></canvas>
+    <canvas id="scene" tabindex="0"></canvas>
 
     <!-- Top bar: title, mode switch, undo/redo, panel toggle -->
     <header id="topbar" class="ui">
@@ -32,6 +32,7 @@
         <button id="btn-redo" class="icon" title="Redo (Ctrl+Y)">↷</button>
         <button id="btn-mode" class="pill" title="Toggle Walk mode (Tab)">🚶 Walk</button>
         <button id="btn-mute" class="icon" title="Mute (M)">🔊</button>
+        <button id="btn-tv" class="pill small" title="TV / remote mode">TV</button>
         <button id="btn-panel" class="icon" title="World settings">⚙️</button>
       </div>
     </header>
@@ -46,6 +47,7 @@
       <button data-tool="smooth" title="Smooth terrain (6)">〰️<small>Smooth</small></button>
       <button data-tool="flatten" title="Flatten terrain (7)">▭<small>Flatten</small></button>
       <button data-tool="paint" title="Paint terrain (8)">🎨<small>Paint</small></button>
+      <button type="button" id="btn-clear-tool" title="Clear Island">🏝️<small>Clear</small></button>
     </nav>
 
     <!-- Context panel for the active tool (filled by ui.js) -->
@@ -66,14 +68,30 @@
       <div class="row stepper">Villagers <button data-npc="villager" data-d="-1">−</button><span id="npc-villager">4</span><button data-npc="villager" data-d="1">+</button></div>
       <div class="row stepper">Critters <button data-npc="critter" data-d="-1">−</button><span id="npc-critter">6</span><button data-npc="critter" data-d="1">+</button></div>
       <div class="row-label">💾 Island</div>
+      <button id="btn-clear" class="danger span2" title="Empty starter island">🏝️ Clear Island</button>
       <div class="grid2">
         <button id="btn-save">💾 Save</button><button id="btn-load">📂 Load</button>
         <button id="btn-export">⬇️ Export</button><button id="btn-import">⬆️ Import</button>
         <button id="btn-share" class="accent">🔗 Share link</button><button id="btn-random">🎲 Random</button>
-        <button id="btn-reset" class="danger">🧹 Reset</button><button id="btn-help">❓ Help</button>
+        <button id="btn-reset" class="danger" title="Reset to a blank beach">🧹 Reset</button><button id="btn-help">❓ Help</button>
       </div>
       <input type="file" id="file-import" accept="application/json,.json" hidden />
     </aside>
+
+    <!-- TV remote: camera, cursor and prop buttons. Hidden unless TV mode is on. -->
+    <div id="tv-cam" class="ui build-only">
+      <button id="tv-island" title="Move the island cursor">🎯 Cursor</button>
+      <div class="tv-grid">
+        <button id="tv-cam-left" title="Rotate camera left">↺</button>
+        <button id="tv-cam-right" title="Rotate camera right">↻</button>
+        <button id="tv-zoom-in" title="Zoom in">＋</button>
+        <button id="tv-zoom-out" title="Zoom out">－</button>
+        <button id="tv-rot-l" title="Rotate selected prop">⟲</button>
+        <button id="tv-rot-r" title="Rotate selected prop">⟳</button>
+        <button id="tv-del" class="danger" title="Delete selected prop">🗑️</button>
+      </div>
+    </div>
+    <div id="tv-hint" class="ui">Arrows move cursor · OK uses tool · Back for menu</div>
 
     <!-- Walk mode HUD -->
     <div id="walk-hud" class="ui walk-only">

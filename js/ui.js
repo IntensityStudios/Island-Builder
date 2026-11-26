@@ -29,6 +29,8 @@ export class UI {
     this.renderContext();
     this.syncHistory();
     this.syncWorld();
+    this.onWorldToggle = () => {};
+    this.onModalOpen = () => {};
     this.toggleWorld(!window.matchMedia('(max-width: 720px)').matches); // open by default on desktop
   }
 
@@ -48,6 +50,7 @@ export class UI {
   toggleWorld(show = $('world').classList.contains('hidden')) {
     $('world').classList.toggle('hidden', !show);
     document.body.classList.toggle('world-open', show);
+    this.onWorldToggle(show);
   }
   toggleMute() { this.audio.start(); this.audio.setMuted(!this.audio.muted); this.syncMute(); this.audio.click(); }
   syncMute() { $('btn-mute').textContent = this.audio.muted ? '🔇' : '🔊'; }
@@ -64,12 +67,13 @@ export class UI {
 
   // ---- tool palette -------------------------------------------------------
   bindTools() {
-    for (const b of document.querySelectorAll('#tools button')) {
+    for (const b of document.querySelectorAll('#tools button[data-tool]')) {
       b.onclick = () => { this.tools.setTool(b.dataset.tool); this.audio.click(); };
     }
+    $('btn-clear-tool').onclick = () => { this.actions.clearIsland(); this.audio.click(); };
   }
   syncTools() {
-    for (const b of document.querySelectorAll('#tools button')) b.classList.toggle('active', b.dataset.tool === this.tools.tool);
+    for (const b of document.querySelectorAll('#tools button[data-tool]')) b.classList.toggle('active', b.dataset.tool === this.tools.tool);
   }
 
   // ---- context panel ------------------------------------------------------
@@ -169,6 +173,7 @@ export class UI {
     $('btn-share').onclick = () => a.share();
     $('btn-random').onclick = () => a.random();
     $('btn-reset').onclick = () => a.reset();
+    $('btn-clear').onclick = () => a.clearIsland();
     $('btn-help').onclick = () => a.help();
   }
 
@@ -206,6 +211,7 @@ export class UI {
       actions.insertBefore(b, $('modal-close'));
     }
     $('modal').classList.remove('hidden');
+    this.onModalOpen();
   }
   closeModal() { $('modal').classList.add('hidden'); }
 }

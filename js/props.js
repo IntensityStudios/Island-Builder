@@ -19,19 +19,44 @@ const cyl = (rt, rb, h, s = 7) => geo(`c${rt},${rb},${h},${s}`, () => new THREE.
 const cone = (r, h, s = 7) => geo(`k${r},${h},${s}`, () => new THREE.ConeGeometry(r, h, s));
 const ico = (r, d = 0) => geo(`i${r},${d}`, () => new THREE.IcosahedronGeometry(r, d));
 const dode = (r) => geo(`d${r}`, () => new THREE.DodecahedronGeometry(r, 0));
-const sphere = (r) => geo(`s${r}`, () => new THREE.SphereGeometry(r, 8, 6));
+const sphere = (r) => geo(`s${r}`, () => new THREE.SphereGeometry(r, 10, 8));
 
-/** Flat-shaded matte material, cached by colour. */
+/** Soft three-stop lighting ramp shared by terrain, props and characters. */
+let gradientMap = null;
+export function sharedGradient() {
+  if (gradientMap) return gradientMap;
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 1;
+  const g = c.getContext('2d');
+  const grd = g.createLinearGradient(0, 0, 256, 0);
+  grd.addColorStop(0, '#6a7280');
+  grd.addColorStop(0.42, '#b4bcc6');
+  grd.addColorStop(0.58, '#e6ebf1');
+  grd.addColorStop(1, '#ffffff');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 256, 1);
+  gradientMap = new THREE.CanvasTexture(c);
+  gradientMap.magFilter = THREE.LinearFilter;
+  gradientMap.minFilter = THREE.LinearFilter;
+  gradientMap.generateMipmaps = false;
+  gradientMap.colorSpace = THREE.LinearSRGBColorSpace;
+  return gradientMap;
+}
+
+/** Soft toon material, cached by colour. `rough` is kept so older callers stay valid. */
 export function mat(color, rough = 0.85) {
   const key = `${color}|${rough}`;
-  if (!matCache.has(key)) matCache.set(key, new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0, flatShading: true }));
+  if (!matCache.has(key)) {
+    matCache.set(key, new THREE.MeshToonMaterial({ color, gradientMap: sharedGradient(), flatShading: true }));
+  }
   return matCache.get(key);
 }
 /** Emissive material that brightens at night (windows, lanterns, flames). */
 function glowMat(color, base = 0.15, night = 1.6) {
   const key = `g${color}|${base}|${night}`;
   if (!matCache.has(key)) {
-    const m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: base, roughness: 0.6, flatShading: true });
+    const m = new THREE.MeshToonMaterial({ color, emissive: new THREE.Color(color), emissiveIntensity: base, gradientMap: sharedGradient(), flatShading: true });
     matCache.set(key, m);
     glowMats.push({ mat: m, base, night });
   }
@@ -90,41 +115,55 @@ function glow(group, x, y, z, color, size = 1.6, power = 1, flicker = false) {
 const WOOD = '#a87b51', TRUNK = '#8a5a3b', STONE = '#9c9a94';
 
 export const PROP_TYPES = {
-  oak: { label: 'Oak', icon: '🌳', radius: 0.4, build(g, r) {
-    add(g, cyl(0.2, 0.3, 1.6), mat(TRUNK), 0, 0.8, 0);
-    const leaf = mat(r() < 0.5 ? '#5fae4e' : '#6dbb55');
-    add(g, ico(1.1), leaf, 0, 2.3, 0);
-    add(g, ico(0.8), leaf, 0.6, 1.95, 0.3);
-    add(g, ico(0.75), mat('#4f9a45'), -0.55, 2.05, -0.3);
+  oak: { label: 'Oak', icon: '🌳', radius: 0.45, build(g, r) {
+    add(g, cyl(0.22, 0.42, 0.55, 7), mat('#6a432c'), 0, 0.28, 0);
+    add(g, cyl(0.16, 0.24, 1.35, 7), mat(TRUNK), 0, 1.05, 0);
+    add(g, cyl(0.07, 0.11, 0.85, 5), mat(TRUNK), 0.32, 1.55, 0.05, [0, 0, -1.05]);
+    add(g, cyl(0.05, 0.09, 0.7, 5), mat(TRUNK), -0.28, 1.45, -0.08, [0.2, 0, 1.0]);
+    const greens = [r() < 0.5 ? '#3f8f45' : '#4e9a48', '#67b556', '#2f7a40', '#8bc86a', '#3d8a44'];
+    const blobs = [[0, 2.45, 0, 1.05], [0.72, 2.05, 0.28, 0.72], [-0.68, 2.12, -0.22, 0.7], [0.12, 3.05, -0.32, 0.58], [-0.22, 1.85, 0.55, 0.52], [0.35, 2.55, -0.45, 0.42]];
+    blobs.forEach((b, i) => add(g, ico(b[3], 1), mat(greens[i % greens.length]), b[0], b[1], b[2]));
   } },
-  pine: { label: 'Pine', icon: '🌲', radius: 0.35, build(g) {
-    add(g, cyl(0.16, 0.24, 1.2), mat(TRUNK), 0, 0.6, 0);
-    for (let k = 0; k < 3; k++) add(g, cone(1.3 - k * 0.32, 1.6, 7), mat(k % 2 ? '#2f7a4a' : '#358752'), 0, 1.5 + k * 0.85, 0);
+  pine: { label: 'Pine', icon: '🌲', radius: 0.4, build(g) {
+    add(g, cyl(0.18, 0.34, 0.45, 7), mat('#6a432c'), 0, 0.22, 0);
+    add(g, cyl(0.1, 0.16, 2.4, 6), mat(TRUNK), 0, 1.35, 0);
+    const cols = ['#2c6e44', '#348554', '#25633c', '#3e9458'];
+    for (let k = 0; k < 4; k++) add(g, cone(1.35 - k * 0.28, 1.35, 8), mat(cols[k]), 0, 1.35 + k * 0.72, 0);
+    add(g, cone(0.22, 0.45, 6), mat('#4ea862'), 0, 4.15, 0);
   } },
   birch: { label: 'Birch', icon: '🌿', radius: 0.3, build(g) {
-    add(g, cyl(0.11, 0.15, 2.6), mat('#efeae0'), 0, 1.3, 0);
-    add(g, box(0.24, 0.08, 0.24), mat('#3b3a36'), 0, 0.9, 0);
-    add(g, box(0.22, 0.06, 0.22), mat('#3b3a36'), 0, 1.7, 0);
-    add(g, dode(0.9), mat('#b5d35a'), 0, 2.9, 0);
-    add(g, dode(0.55), mat('#c8dc6a'), 0.45, 2.4, 0.2);
+    add(g, cyl(0.1, 0.16, 2.7, 7), mat('#f4f0e6'), 0, 1.35, 0);
+    add(g, box(0.22, 0.08, 0.2), mat('#3b3a36'), 0, 0.7, 0);
+    add(g, box(0.2, 0.07, 0.18), mat('#3b3a36'), 0, 1.45, 0);
+    add(g, box(0.16, 0.06, 0.16), mat('#3b3a36'), 0, 2.15, 0);
+    add(g, cyl(0.04, 0.07, 0.8, 5), mat('#f4f0e6'), 0.22, 2.15, 0, [0, 0, -0.8]);
+    add(g, dode(0.85), mat('#b5d35a'), 0, 3.05, 0);
+    add(g, ico(0.55, 1), mat('#c8dc6a'), 0.5, 2.55, 0.15);
+    add(g, ico(0.42, 1), mat('#d5e888'), -0.35, 2.7, -0.2);
   } },
   palm: { label: 'Palm', icon: '🌴', radius: 0.3, build(g) {
     const bark = mat('#b08a5a');
     let x = 0;
-    for (let k = 0; k < 5; k++) { add(g, cyl(0.15, 0.19, 0.72), bark, x, 0.36 + k * 0.66, 0, [0, 0, -0.1 * k]); x += 0.07 * k; }
-    const top = new THREE.Group(); top.position.set(x, 3.45, 0); g.add(top);
-    const leaf = mat('#4fa84a');
-    for (let k = 0; k < 7; k++) {
-      const pivot = new THREE.Group(); pivot.rotation.y = (k / 7) * Math.PI * 2; top.add(pivot);
-      add(pivot, box(1.9, 0.05, 0.42), leaf, 0.9, -0.25, 0, [0, 0, -0.45]);
+    for (let k = 0; k < 6; k++) { add(g, cyl(0.13, 0.18, 0.62, 6), bark, x, 0.32 + k * 0.58, 0, [0, 0, -0.08 * k]); x += 0.05 * k; }
+    const top = new THREE.Group(); top.position.set(x, 3.55, 0); g.add(top);
+    const leaf = mat('#3f9a45');
+    const leaf2 = mat('#67b85a');
+    for (let k = 0; k < 8; k++) {
+      const pivot = new THREE.Group(); pivot.rotation.y = (k / 8) * Math.PI * 2; top.add(pivot);
+      add(pivot, box(1.7, 0.05, 0.36), k % 2 ? leaf2 : leaf, 0.85, -0.15, 0, [0, 0, -0.55]);
+      add(pivot, box(0.7, 0.04, 0.22), leaf2, 1.7, -0.55, 0, [0, 0, -0.9]);
     }
-    for (let k = 0; k < 3; k++) add(top, sphere(0.13), mat('#6b4a2b'), Math.cos(k * 2.1) * 0.2, -0.2, Math.sin(k * 2.1) * 0.2);
+    for (let k = 0; k < 4; k++) add(top, sphere(0.12), mat('#6b4428'), Math.cos(k * 1.6) * 0.18, -0.15, Math.sin(k * 1.6) * 0.18);
   } },
-  cherry: { label: 'Blossom', icon: '🌸', radius: 0.4, build(g) {
-    add(g, cyl(0.17, 0.27, 1.5), mat('#6e4630'), 0, 0.75, 0);
-    add(g, ico(1.0), mat('#f2a7c9'), 0, 2.15, 0);
-    add(g, ico(0.7), mat('#f7c3db'), 0.6, 1.9, 0.2);
-    add(g, ico(0.65), mat('#e98fb8'), -0.5, 1.95, -0.3);
+  cherry: { label: 'Blossom', icon: '🌸', radius: 0.4, build(g, r) {
+    add(g, cyl(0.16, 0.28, 1.45, 6), mat('#6e4630'), 0, 0.72, 0);
+    add(g, cyl(0.05, 0.08, 0.6, 5), mat('#6e4630'), 0.25, 1.35, 0, [0, 0, -0.9]);
+    const puffs = [[0, 2.2, 0, 0.95, '#f2a7c9'], [0.62, 1.95, 0.2, 0.62, '#f7c3db'], [-0.55, 2.0, -0.25, 0.58, '#e98fb8'], [0.1, 2.75, -0.2, 0.48, '#ffd0e4'], [-0.15, 1.7, 0.45, 0.4, '#f4b6d0']];
+    for (const b of puffs) add(g, ico(b[3], 1), mat(b[4]), b[0], b[1], b[2]);
+    for (let k = 0; k < 5; k++) {
+      const a = r() * Math.PI * 2;
+      add(g, sphere(0.06), mat('#fff0f6'), Math.cos(a) * 0.8, 1.2 + r() * 0.4, Math.sin(a) * 0.8);
+    }
   } },
   bush: { label: 'Bush', icon: '🍀', radius: 0, build(g) {
     add(g, ico(0.6), mat('#4f9a45'), 0, 0.45, 0);
@@ -144,27 +183,54 @@ export const PROP_TYPES = {
     add(g, sphere(0.75), mat('#d9473b'), 0, 0.95, 0, null, [1, 0.6, 1]);
     for (let k = 0; k < 5; k++) add(g, sphere(0.1), mat('#ffffff'), Math.cos(k * 1.3) * 0.45, 1.25 - (k % 2) * 0.1, Math.sin(k * 1.3) * 0.45);
   } },
-  rock: { label: 'Rock', icon: '🪨', radius: 0.6, build(g) {
-    add(g, dode(0.7), mat('#8e9096'), 0, 0.3, 0, [0.3, 0.6, 0], [1, 0.7, 0.9]);
-    add(g, dode(0.35), mat('#a3a5aa'), 0.6, 0.15, 0.3, [0.5, 0.2, 0.1]);
+  rock: { label: 'Rock', icon: '🪨', radius: 0.6, build(g, r) {
+    const cols = ['#8d9098', '#a0a4ac', '#747880', '#c2c6cc'];
+    add(g, ico(0.62, 0), mat(cols[0]), 0, 0.34, 0, [0.4, r() * 0.5, 0.15], [1.2, 0.72, 0.95]);
+    add(g, dode(0.38), mat(cols[1]), 0.5, 0.22, 0.28, [0.6, 0.4, 0.2], [1, 0.8, 0.9]);
+    add(g, ico(0.28, 0), mat(cols[2]), -0.42, 0.16, -0.2, [0.2, 0.8, 0.4]);
+    if (r() < 0.55) add(g, ico(0.14, 0), mat('#6ea85a'), 0.08, 0.62, 0.05, null, [1, 0.45, 1]);
   } },
-  boulder: { label: 'Boulder', icon: '⛰️', radius: 1.4, build(g) {
-    add(g, ico(1.4), mat('#85878d'), 0, 0.8, 0, [0.2, 0.4, 0.1], [1.2, 0.8, 1]);
-    add(g, ico(0.8), mat('#9a9ca1'), 1.1, 0.4, 0.6, [0.6, 0.1, 0.3]);
-    add(g, ico(0.5), mat('#7ec06a'), -0.4, 1.55, 0.2, null, [1, 0.35, 1]); // moss cap
+  boulder: { label: 'Boulder', icon: '⛰️', radius: 1.4, build(g, r) {
+    add(g, ico(1.25, 0), mat('#7e828a'), 0, 0.85, 0, [0.25, 0.4, 0.1], [1.25, 0.85, 1.05]);
+    add(g, ico(0.72, 0), mat('#989ca4'), 1.05, 0.48, 0.45, [0.5, 0.2, 0.35]);
+    add(g, dode(0.48), mat('#6e727a'), -0.85, 0.4, -0.35, [0.4, 0.7, 0.2]);
+    add(g, ico(0.55, 1), mat('#6eaa62'), -0.25, 1.55, 0.15, null, [1.1, 0.38, 0.9]);
+    if (r() > 0.4) add(g, ico(0.22, 0), mat('#8d939c'), 0.4, 1.35, -0.5);
   } },
   house: { label: 'House', icon: '🏠', radius: 1.6, build(g, r) {
     const roofs = ['#c8553d', '#4f6d7a', '#7a9e3a', '#a05c8c'];
-    add(g, box(2.6, 1.8, 2.2), mat('#f3e3c3'), 0, 0.9, 0);
-    add(g, cone(2.1, 1.3, 4), mat(roofs[Math.floor(r() * roofs.length)]), 0, 2.45, 0, [0, Math.PI / 4, 0], [1, 1, 0.86]);
-    add(g, box(0.3, 0.8, 0.3), mat('#8c6b5a'), 0.7, 2.7, -0.4);
-    add(g, box(0.55, 0.95, 0.06), mat('#7a4e2d'), 0, 0.48, 1.11);
-    const win = glowMat('#ffd27a', 0.05, 2.2);
-    add(g, box(0.45, 0.45, 0.06), win, -0.85, 1.15, 1.11);
-    add(g, box(0.45, 0.45, 0.06), win, 0.85, 1.15, 1.11);
-    add(g, box(0.06, 0.45, 0.45), win, 1.31, 1.1, 0);
-    add(g, box(0.06, 0.45, 0.45), win, -1.31, 1.1, 0);
-    glow(g, 0, 1.2, 1.4, '#ffcf7a', 2.6, 0.7);
+    const roof = roofs[Math.floor(r() * roofs.length)];
+    const wall = mat('#f6ead2');
+    const timber = mat('#8a5a3c');
+    const trim = mat('#fff8ee');
+    add(g, box(2.9, 0.28, 2.5), mat('#d9c4a2'), 0, 0.14, 0);
+    add(g, box(2.45, 1.5, 2.05), wall, 0, 1.05, 0);
+    add(g, box(2.5, 0.1, 2.12), timber, 0, 1.78, 0);
+    add(g, box(0.1, 1.5, 2.12), timber, -1.22, 1.05, 0);
+    add(g, box(0.1, 1.5, 2.12), timber, 1.22, 1.05, 0);
+    add(g, box(2.55, 0.08, 0.1), timber, 0, 1.15, 1.02);
+    add(g, cone(2.15, 1.2, 4), mat(roof), 0, 2.55, 0, [0, Math.PI / 4, 0], [1.08, 1, 0.92]);
+    add(g, box(2.7, 0.08, 2.35), mat('#6e3b32'), 0, 1.98, 0);
+    add(g, box(0.28, 0.85, 0.28), mat('#a3543f'), 0.78, 2.85, -0.32);
+    add(g, box(0.38, 0.08, 0.38), mat('#6e3b32'), 0.78, 3.25, -0.32);
+    add(g, box(0.52, 0.92, 0.08), mat('#6b4428'), 0, 0.6, 1.06);
+    add(g, box(0.62, 0.08, 0.16), mat('#cbb89a'), 0, 0.18, 1.14);
+    add(g, sphere(0.06), mat('#e6c56a'), 0.16, 0.95, 1.12);
+    const win = glowMat('#ffe1a0', 0.12, 2.6);
+    const frame = (x, y, z, sx, sy, sz, depth = 0.02) => {
+      add(g, box(sx + 0.1, sy + 0.1, Math.abs(sz) + 0.02), trim, x, y, z);
+      const nz = z + Math.sign(z || 1) * depth;
+      add(g, box(sx, sy, Math.abs(sz) + 0.03), win, x, y, nz);
+    };
+    frame(-0.78, 1.22, 1.02, 0.4, 0.4, 0.05);
+    frame(0.78, 1.22, 1.02, 0.4, 0.4, 0.05);
+    add(g, box(0.1, 0.46, 0.52), trim, 1.26, 1.18, 0.15);
+    add(g, box(0.12, 0.36, 0.4), win, 1.3, 1.18, 0.15);
+    add(g, box(0.62, 0.12, 0.18), timber, -0.78, 0.92, 1.16);
+    add(g, ico(0.1, 0), mat('#e86b8a'), -0.95, 1.05, 1.22);
+    add(g, ico(0.09, 0), mat('#ffd166'), -0.72, 1.08, 1.22);
+    add(g, ico(0.08, 0), mat('#f2a7c9'), -0.84, 1.12, 1.24);
+    glow(g, 0, 1.25, 1.5, '#ffcf7a', 2.8, 0.85);
   } },
   hut: { label: 'Hut', icon: '🛖', radius: 1.3, build(g) {
     add(g, cyl(1.1, 1.2, 1.3, 8), mat('#c9a46b'), 0, 0.65, 0);

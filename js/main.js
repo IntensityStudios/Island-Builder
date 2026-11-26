@@ -1,13 +1,20 @@
 // Island Builder – entry point. Wires renderer, camera, systems, UI and the main loop.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { World } from './world.js';
 import { BuildTools } from './tools.js';
 import { History } from './history.js';
 import { WalkMode } from './walk.js';
 import { AudioEngine } from './audio.js';
 import { UI } from './ui.js';
-import { generateIsland, flatIsland } from './generator.js';
+import { TvMode } from './tv.js';
+import { generateIsland, flatIsland, baseIsland } from './generator.js';
 import * as storage from './storage.js';
 
 // ---------------------------------------------------------------------------
@@ -18,11 +25,12 @@ if (isTouch) document.body.classList.add('touch');
 
 const canvas = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isTouch ? 1.5 : 1.75)); // cap for performance
+const pixelCap = isTouch ? 1.25 : 1.5;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pixelCap));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.08;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1200);
@@ -37,10 +45,50 @@ controls.maxDistance = 150;
 controls.maxPolarAngle = Math.PI * 0.47;
 controls.listenToKeyEvents(window);
 
+// Light post stack on larger screens. Phones skip it (MSAA + a lower pixel ratio only).
+let composer = null;
+let bloomPass = null;
+let gradePass = null;
+let fxaaPass = null;
+if (!isTouch) {
+  // Unsigned-byte targets. Half-float composer buffers come out blank on some GPUs (including software GL).
+  const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.UnsignedByteType });
+  composer = new EffectComposer(renderer, rt);
+  composer.addPass(new RenderPass(scene, camera));
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.18, 0.35, 0.88);
+  composer.addPass(bloomPass);
+  gradePass = new ShaderPass({
+    uniforms: { tDiffuse: { value: null }, uNight: { value: 0 } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `
+      uniform sampler2D tDiffuse; uniform float uNight; varying vec2 vUv;
+      void main() {
+        vec4 src = texture2D(tDiffuse, vUv);
+        vec3 c = src.rgb;
+        c = mix(c, c * vec3(1.04, 1.01, 0.97), 0.35 * (1.0 - uNight));
+        float vig = smoothstep(0.9, 0.3, length(vUv - 0.5));
+        c *= mix(0.82, 1.0, vig);
+        gl_FragColor = vec4(c, 1.0);
+      }
+    `,
+  });
+  composer.addPass(gradePass);
+  fxaaPass = new ShaderPass(FXAAShader);
+  composer.addPass(fxaaPass);
+  composer.addPass(new OutputPass());
+}
+
 /** Size the canvas to the *visible* area (handles mobile URL bars via visualViewport). */
 function resize() {
   const w = canvas.clientWidth || window.innerWidth, h = canvas.clientHeight || window.innerHeight;
+  const pr = Math.min(window.devicePixelRatio || 1, pixelCap);
+  renderer.setPixelRatio(pr);
   renderer.setSize(w, h, false);
+  if (composer) {
+    composer.setPixelRatio(pr);
+    composer.setSize(w, h);
+    if (fxaaPass) fxaaPass.material.uniforms.resolution.value.set(1 / (w * pr), 1 / (h * pr));
+  }
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -55,7 +103,7 @@ camera.position.multiplyScalar(THREE.MathUtils.clamp(0.75 / camera.aspect, 1, 1.
 // Systems
 // ---------------------------------------------------------------------------
 const audio = new AudioEngine();
-const world = new World(scene, { shadowSize: isTouch ? 1024 : 2048 });
+const world = new World(scene, { shadowSize: isTouch ? 1024 : 2048, lite: isTouch });
 const history = new History(() => world.snapshot(), (s) => world.restore(s));
 const tools = new BuildTools({ world, camera, canvas, controls, history, audio });
 const walk = new WalkMode({ camera, canvas, scene, terrain: world.terrain, props: world.props, audio });
@@ -94,6 +142,7 @@ const actions = {
       ui.setWalking(true);
       ui.toast(isTouch ? 'Left stick to move · drag to look' : 'WASD to move · click to look around · Tab to build');
     }
+    tv?.onWalk(walk.active);
     audio.whoosh();
   },
   save() {
@@ -138,12 +187,27 @@ const actions = {
     audio.chime();
   },
   reset() {
-    ui.modal('<h3>🧹 Start over?</h3><p>This clears the island to a blank, flat beach. You can still undo it.</p>', [
-      { label: 'Reset island', cls: 'danger', onClick: () => {
+    ui.modal('<h3>🧹 Reset to a blank beach?</h3><p>This is the small rounded beach, separate from Clear Island. You can still undo it.</p>', [
+      { label: 'Reset beach', cls: 'danger', onClick: () => {
         history.record();
         world.setState({ ...flatIsland(), settings: world.settings });
+        tools.select(null);
         ui.closeModal();
-        ui.toast('Fresh, empty island');
+        ui.toast('Blank beach');
+        audio.whoosh();
+      } },
+    ]);
+  },
+  clearIsland() {
+    ui.modal('<h3>🏝️ Clear island?</h3><p>Terrain goes back to the wide, flat starter island. Every prop and paint stroke is removed. You can undo this. Reset still makes the smaller blank beach, and Random builds a new island.</p>', [
+      { label: 'Clear island', cls: 'danger', onClick: () => {
+        history.record();
+        world.setState({ ...baseIsland(), settings: world.settings });
+        world.npcs.respawn();
+        tools.select(null);
+        ui.closeModal();
+        ui.syncWorld();
+        ui.toast('Empty island — ready to build');
         audio.whoosh();
       } },
     ]);
@@ -157,6 +221,12 @@ const actions = {
       <p><b>Walk mode</b> (<kbd>Tab</kbd>)</p><ul>
       <li>PC: <kbd>WASD</kbd> move · mouse look (click to lock) · <kbd>Space</kbd> jump · <kbd>Shift</kbd> run · <kbd>V</kbd> first/third person · <kbd>Tab</kbd>/<kbd>Esc</kbd> back to building</li>
       <li>Phone: left stick to move (push all the way to run), drag to look, buttons to jump and switch view.</li></ul>
+      <p><b>Clear Island</b> restores the wide empty starter island and removes every prop (undoable). <b>Reset</b> is the smaller blank beach. <b>Random</b> builds a new island.</p>
+      <p><b>TV / remote</b> (button, or add <kbd>?tv=1</kbd>)</p><ul>
+      <li>Arrows move a cursor on the island. Hold an arrow to go faster. OK / Enter uses the current tool.</li>
+      <li>Back (Backspace, Escape, or the remote Back key) closes a panel, leaves the cursor for the menu, or returns from walking to build mode.</li>
+      <li>On-screen buttons rotate and zoom the camera, and rotate or delete the selected prop.</li>
+      <li>In walk mode, arrows move and turn, OK jumps, Back goes back to building.</li></ul>
       <p>Your island autosaves on this device. Use <b>Share link</b> to send it to anyone.</p>`);
   },
 };
@@ -171,6 +241,7 @@ async function copyText(text) {
 }
 
 ui = new UI({ world, tools, history, audio, actions });
+const tv = new TvMode({ world, tools, walk, controls, camera, canvas, ui, actions, audio });
 
 // ---------------------------------------------------------------------------
 // Keyboard shortcuts
@@ -262,9 +333,14 @@ function frame() {
   tmpTarget.copy(walk.active ? walk.pos : controls.target);
   world.update(dt, elapsed, camera.position, tmpTarget);
   audio.update(dt, { night: world.sky.night, rain: world.weather.mix.rain, wind: world.weather.mix.snow });
+  tv.update(dt);
   uiTimer -= dt;
   if (uiTimer <= 0) { uiTimer = 0.5; ui.syncWorld(); } // keeps sliders/labels in sync
-  renderer.render(scene, camera);
+  if (composer) {
+    bloomPass.strength = 0.12 + world.sky.night * 0.38;
+    gradePass.uniforms.uNight.value = world.sky.night;
+    composer.render();
+  } else renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 
@@ -274,4 +350,4 @@ init().then(() => {
 });
 
 // Handy for debugging / automated tests / future extensions.
-window.__island = { THREE, world, tools, walk, history, actions, storage, camera, controls, ui };
+window.__island = { THREE, world, tools, walk, history, actions, storage, camera, controls, ui, tv };

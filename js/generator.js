@@ -126,3 +126,21 @@ export function flatIsland() {
   }
   return { heights, paint: new Uint8Array(VERTS), props: [] };
 }
+
+/**
+ * Wide, flat-ish default landmass for Clear Island.
+ * No sculpting, no paint, no props — an empty island to build on.
+ * Distinct from flatIsland(), which stays the smaller blank beach used by Reset.
+ */
+export function baseIsland() {
+  const heights = new Float32Array(VERTS);
+  for (let j = 0; j < SIDE; j++) for (let i = 0; i < SIDE; i++) {
+    const x = i / GRID - 0.5, z = j / GRID - 0.5;
+    const r = Math.hypot(x * 1.04, z * 1.04) * 2;
+    const t = Math.max(0, Math.min(1, (0.98 - r) / 0.22));
+    const s = t * t * (3 - 2 * t);
+    const swell = Math.max(0, 1 - (x * x + z * z) * 5.5);
+    heights[j * SIDE + i] = -6.2 + s * (7.35 + swell * 0.4);
+  }
+  return { heights, paint: new Uint8Array(VERTS), props: [] };
+}

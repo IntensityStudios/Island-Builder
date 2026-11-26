@@ -34,7 +34,9 @@ it's plain HTML/CSS/JS modules, so it works on GitHub Pages or any static host.
 - **Walk mode** – explore in third or first person; walk on docks and bridges, swim in the sea, bump into houses and trees.
 - **Save / Load** on your device (plus automatic autosave), **Export / Import** JSON files.
 - **Share link** – the whole island is compressed into the URL, so anyone opening the link sees your island.
-- **Random island generator** (with a village, windmill, lighthouse and dock) and **Reset**.
+- **Random island generator** (with a village, windmill, lighthouse and dock). **Clear Island** puts back the wide, flat starter island and removes every prop (confirm, then undo). **Reset** still makes the smaller blank beach.
+- **Stylized graphics** — soft toon shading, fuller trees and houses, grass and sand variation, shoreline foam, a warmer sky, and light bloom on larger screens. Phones skip the heavy effects.
+- **TV / remote mode** — play with a smart-TV remote (arrows, OK, Back). It turns on for TV browsers, from the **TV** button, or with `?tv=1`.
 - **Ambient synthesized audio** – ocean, wind, rain, birds by day, crickets at night, soft UI sounds. Mute any time.
 - **Mobile-friendly** – big touch buttons, bottom toolbar, collapsible panels, joystick in walk mode, no page scroll or pinch-zoom,
   notch-safe layout, capped pixel ratio and smaller shadow maps on phones.
@@ -67,6 +69,23 @@ it's plain HTML/CSS/JS modules, so it works on GitHub Pages or any static host.
 | Jump / swim up | `Space` | ⤒ button |
 | First / third person | `V` | 👁️ button |
 | Back to building | `Tab` or `Esc` | 🛠️ Build button |
+
+### TV / remote mode
+Turn it on with the **TV** button or by opening the page with `?tv=1`. It also turns on by itself when the browser looks like a smart TV (Tizen, webOS, Android TV, BRAVIA, Roku, Fire TV, and similar).
+
+The buttons and text get larger, and the focused control has a yellow outline. On a remote:
+
+| Action | Remote |
+| --- | --- |
+| Move the build cursor | Arrow keys (hold to go faster) |
+| Use the current tool | OK / Enter |
+| Move between buttons | Arrow keys, while a button is highlighted |
+| Rotate / zoom the camera | On-screen ↺ ↻ ＋ － buttons |
+| Rotate / delete a prop | On-screen ⟲ ⟳ 🗑️ buttons, or the select panel |
+| Close a panel, leave the cursor, or stop walking | Back — Backspace, Escape, or the remote Back key |
+| Walk | Arrows move and turn · OK jumps · Back returns to build |
+
+PC mouse, keyboard and touch controls stay as they are when TV mode is off.
 
 ## Project structure
 

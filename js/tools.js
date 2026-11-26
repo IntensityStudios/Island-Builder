@@ -36,6 +36,21 @@ export class BuildTools {
     this.ring.frustumCulled = false;
     world.scene.add(this.ring);
 
+    // TV / remote cursor: a beacon that sits on the island and is moved with the D-pad.
+    this.cursor = new THREE.Vector3(0, 0, 0);
+    this.cursorActive = false;
+    this.cursorMark = new THREE.Group();
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 6), new THREE.MeshBasicMaterial({ color: '#ffe14a', depthTest: false }));
+    pole.position.y = 1.5;
+    pole.renderOrder = 12;
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.38, 0), new THREE.MeshBasicMaterial({ color: '#fff4b0', depthTest: false }));
+    gem.position.y = 2.7;
+    gem.renderOrder = 12;
+    this.cursorMark.add(pole, gem);
+    this.cursorMark.visible = false;
+    this.cursorGem = gem;
+    world.scene.add(this.cursorMark);
+
     // Selection marker
     this.selRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.1, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffd166', transparent: true, opacity: 0.9, depthTest: false }));
     this.selRing.renderOrder = 11;
@@ -178,7 +193,9 @@ export class BuildTools {
   // ---- actions ------------------------------------------------------------
   placeAt(clientX, clientY) {
     const p = this.groundHit(clientX, clientY);
-    if (!p) return;
+    if (p) this.placeAtWorld(p);
+  }
+  placeAtWorld(p) {
     const def = PROP_TYPES[this.propType];
     if (!def.snap && p.y < this.world.terrain.waterLevel - 1.5) { this.audio.remove(); return; } // too deep
     this.history.record();
@@ -186,6 +203,48 @@ export class BuildTools {
     this.ghostRot = Math.random() * Math.PI * 2;
     this.audio.pop();
     this.world.changed();
+  }
+
+  /** Point on the terrain (or water) under the remote cursor. */
+  pointOnCursor() {
+    const y = this.world.terrain.heightAt(this.cursor.x, this.cursor.z);
+    const surface = Math.max(y, this.world.terrain.waterLevel);
+    return new THREE.Vector3(this.cursor.x, surface, this.cursor.z);
+  }
+  moveCursor(dx, dz) {
+    const lim = WORLD / 2 - 1;
+    this.cursor.x = THREE.MathUtils.clamp(this.cursor.x + dx, -lim, lim);
+    this.cursor.z = THREE.MathUtils.clamp(this.cursor.z + dz, -lim, lim);
+  }
+  setCursorActive(on) {
+    this.cursorActive = on;
+    this.cursorMark.visible = !!on && this.enabled;
+  }
+  /** OK / Enter on the remote cursor. Sculpt tools keep applying until endCursorStroke(). */
+  useCursor() {
+    const p = this.pointOnCursor();
+    if (this.tool === 'place') this.placeAtWorld(p);
+    else if (this.tool === 'select') this.selectNear(p.x, p.z);
+    else if (SCULPT.includes(this.tool)) this.beginCursorStroke();
+  }
+  beginCursorStroke() {
+    if (this.stroke?.world) return;
+    const p = this.pointOnCursor();
+    this.history.record();
+    this.stroke = { id: 'tv', x: 0, y: 0, target: p.y, world: true };
+  }
+  endCursorStroke() {
+    if (this.stroke?.world) this.endStroke();
+  }
+  selectNear(x, z) {
+    let best = null, bestD = 2.4;
+    for (const r of this.world.props.records) {
+      const d = Math.hypot(r.x - x, r.z - z);
+      const reach = Math.max(bestD, ((PROP_TYPES[r.type].radius || 0.7) * r.scale) + 0.7);
+      if (d <= reach && d < (best ? bestD : reach + 0.01)) { best = r; bestD = d; }
+    }
+    this.select(best ? best.id : null);
+    if (best) this.audio.click();
   }
 
   rotateSelected(delta) { this.editSelected((r) => { r.rot += delta; }); }
@@ -249,17 +308,33 @@ export class BuildTools {
     if (this.ghost) this.ghost.visible = false;
     if (!this.enabled) { this.selRing.visible = false; return; }
 
+    const showCursor = this.cursorActive && this.enabled;
+    this.cursorMark.visible = showCursor;
+    if (showCursor) {
+      const cp = this.pointOnCursor();
+      this.cursorMark.position.set(cp.x, cp.y, cp.z);
+      this.cursorGem.rotation.y += dt * 1.6;
+      if (SCULPT.includes(this.tool)) this.drawRing(cp);
+      else if (this.ghost) {
+        const def = PROP_TYPES[this.propType];
+        const y = def.snap === 'water' ? Math.max(cp.y, this.world.terrain.waterLevel + 0.35) : cp.y;
+        this.ghost.position.set(cp.x, y, cp.z);
+        this.ghost.rotation.y = this.ghostRot;
+        this.ghost.visible = true;
+      }
+    }
+
     if (this.stroke) {
-      const p = this.groundHit(this.stroke.x, this.stroke.y);
+      const p = this.stroke.world ? this.pointOnCursor() : this.groundHit(this.stroke.x, this.stroke.y);
       if (p) {
         this.world.terrain.applyBrush(this.tool, p.x, p.z, this.brush.size, this.brush.strength, Math.min(dt, 0.05), { target: this.stroke.target, paint: this.paintIndex });
         this.world.props.snapAll();
         this.drawRing(p);
       }
-    } else if (this.hover && SCULPT.includes(this.tool)) {
+    } else if (!showCursor && this.hover && SCULPT.includes(this.tool)) {
       const p = this.groundHit(this.hover.x, this.hover.y);
       if (p) this.drawRing(p);
-    } else if (this.hover && this.ghost && this.pointers.size === 0) {
+    } else if (!showCursor && this.hover && this.ghost && this.pointers.size === 0) {
       const p = this.groundHit(this.hover.x, this.hover.y);
       if (p) {
         const def = PROP_TYPES[this.propType];

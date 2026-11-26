@@ -9,10 +9,10 @@ import { NpcManager } from './npcs.js';
 export const DEFAULT_SETTINGS = { waterLevel: 0, time: 10, autoTime: false, weather: 'clear', villagers: 4, critters: 6 };
 
 export class World {
-  constructor(scene, { shadowSize = 2048 } = {}) {
+  constructor(scene, { shadowSize = 2048, lite = false } = {}) {
     this.scene = scene;
     this.terrain = new Terrain(scene);
-    this.water = new Water(scene);
+    this.water = new Water(scene, this.terrain, { segments: lite ? 48 : 72 });
     this.props = new PropManager(scene, this.terrain);
     this.sky = new Sky(scene, { shadowSize });
     this.weather = new Weather(scene, this.sky, this.water);
