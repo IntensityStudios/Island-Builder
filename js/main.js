@@ -78,8 +78,25 @@ if (!isTouch) {
   composer.addPass(new OutputPass());
 }
 
+/** Fit the stage to the visual viewport (not 100vh) and flag a short phone landscape. */
+function fitStage() {
+  const vv = window.visualViewport;
+  const w = vv ? vv.width : window.innerWidth;
+  const h = vv ? vv.height : window.innerHeight;
+  const root = document.documentElement;
+  root.style.setProperty('--vvw', `${w}px`);
+  root.style.setProperty('--vvh', `${h}px`);
+  root.style.setProperty('--vv-top', `${vv ? vv.offsetTop : 0}px`);
+  root.style.setProperty('--vv-left', `${vv ? vv.offsetLeft : 0}px`);
+  const short = w > h && h <= 500 && !document.body.classList.contains('tv');
+  const was = document.body.classList.contains('short-land');
+  document.body.classList.toggle('short-land', short);
+  if (was !== short) window.__island?.ui?.onLayoutMode?.();
+}
+
 /** Size the canvas to the *visible* area (handles mobile URL bars via visualViewport). */
 function resize() {
+  fitStage();
   const w = canvas.clientWidth || window.innerWidth, h = canvas.clientHeight || window.innerHeight;
   const pr = Math.min(window.devicePixelRatio || 1, pixelCap);
   renderer.setPixelRatio(pr);
@@ -93,7 +110,9 @@ function resize() {
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
 window.visualViewport?.addEventListener('resize', resize);
+window.visualViewport?.addEventListener('scroll', resize);
 new ResizeObserver(resize).observe(canvas);
 resize();
 // Portrait screens see less horizontally, so start the camera further back.

@@ -74,6 +74,7 @@ export class TvMode {
     this.controls.enableKeys = !on;
     this.walk.tvSteer = on && this.walk.active;
     try { sessionStorage.setItem('islandTv', on ? '1' : '0'); } catch { /* ignore */ }
+    window.dispatchEvent(new Event('resize'));
     if (on) {
       this.ui.toggleWorld(false);
       this.focusIsland();

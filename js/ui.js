@@ -31,7 +31,8 @@ export class UI {
     this.syncWorld();
     this.onWorldToggle = () => {};
     this.onModalOpen = () => {};
-    this.toggleWorld(!window.matchMedia('(max-width: 720px)').matches); // open by default on desktop
+    const shortPhone = window.matchMedia('(max-width: 720px)').matches || this.shortLandscape();
+    this.toggleWorld(!shortPhone); // open by default on desktop only
   }
 
   // ---- top bar ------------------------------------------------------------
@@ -62,7 +63,7 @@ export class UI {
   }
   setWalking(on) {
     document.body.classList.toggle('walking', on);
-    $('btn-mode').textContent = on ? '🛠️ Build' : '🚶 Walk';
+    $('btn-mode').innerHTML = on ? '🛠️<span class="mode-label"> Build</span>' : '🚶<span class="mode-label"> Walk</span>';
   }
 
   // ---- tool palette -------------------------------------------------------
@@ -143,6 +144,26 @@ export class UI {
       hint.textContent = info.hint;
       el.appendChild(hint);
     }
+    this.armHintFade();
+  }
+
+  /** In a short landscape phone, the hint card fades so it doesn't cover the island. */
+  onLayoutMode() { this.armHintFade(); }
+  shortLandscape() {
+    return document.body.classList.contains('short-land')
+      || window.matchMedia('(orientation: landscape) and (max-height: 500px)').matches;
+  }
+  armHintFade() {
+    clearTimeout(this.hintTimer);
+    const el = this.context;
+    el.classList.remove('hint-gone', 'hint-card-gone');
+    if (!el.querySelector('.hint') || !this.shortLandscape() || document.body.classList.contains('tv')) return;
+    const onlyHint = !el.querySelector('.palette, .sliders, .actions');
+    this.hintTimer = setTimeout(() => {
+      if (!this.shortLandscape()) return;
+      el.classList.add('hint-gone');
+      if (onlyHint) el.classList.add('hint-card-gone');
+    }, 3200);
   }
 
   // ---- world panel --------------------------------------------------------
